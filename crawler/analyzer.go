@@ -161,8 +161,8 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         Depth:        depth,
         DiscoveredAt: time.Now().UTC(),
         SEO:          SEO{},
-        BrokenLinks:  []BrokenLink{},
-        Assets:       []Asset{},
+        BrokenLinks:  nil,
+        Assets:       nil,
     }
 
     var internalLinks []string
@@ -225,7 +225,10 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             page.Status = "ok"
             page.Error = ""
 
-            if isHTMLContent(resp.Header.Get("Content-Type")) {
+            page.BrokenLinks = []BrokenLink{}
+            page.Assets = []Asset{}
+
+            if isHTMLContent(resp.Header.Get("Content-Type")) || strings.Contains(pageURL, "feed.xml") {
                 seoTags := ParseSEOTags(body)
                 page.SEO = SEO{
                     HasTitle:       seoTags.Title != "",
@@ -304,6 +307,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
     } else {
         page.Error = http.StatusText(lastStatusCode)
     }
+
     return page, internalLinks
 }
 
