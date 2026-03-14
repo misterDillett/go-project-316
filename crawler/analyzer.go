@@ -175,6 +175,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             case <-ctx.Done():
                 page.HTTPStatus = 0
                 page.Status = "error"
+                page.Error = ctx.Err().Error()
                 return page, internalLinks
             }
         }
@@ -183,14 +184,17 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             if !limiter.Wait(ctx) {
                 page.HTTPStatus = 0
                 page.Status = "error"
-                page.Error = err.Error()
+                page.Error = "cancelled by rate limiter"
                 return page, internalLinks
             }
         }
 
         req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
         if err != nil {
-            continue
+            page.HTTPStatus = 0
+            page.Status = "error"
+            page.Error = err.Error()
+            return page, internalLinks
         }
 
         if opts.UserAgent != "" {
@@ -199,7 +203,10 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
 
         resp, err := opts.HTTPClient.Do(req)
         if err != nil {
-            continue
+            page.HTTPStatus = 0
+            page.Status = "error"
+            page.Error = err.Error()
+            return page, internalLinks
         }
 
         body, err := io.ReadAll(resp.Body)
@@ -207,12 +214,16 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         resp.Body.Close()
 
         if err != nil {
-            continue
+            page.HTTPStatus = resp.StatusCode
+            page.Status = "error"
+            page.Error = err.Error()
+            return page, internalLinks
         }
 
         if resp.StatusCode >= 200 && resp.StatusCode < 300 {
             page.HTTPStatus = resp.StatusCode
             page.Status = "ok"
+            page.Error = ""
 
             if isHTMLContent(resp.Header.Get("Content-Type")) {
                 seoTags := ParseSEOTags(body)
@@ -277,12 +288,18 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         if !isRetryableStatusCode(resp.StatusCode) {
             page.HTTPStatus = resp.StatusCode
             page.Status = "error"
+            page.Error = http.StatusText(resp.StatusCode)
             return page, internalLinks
         }
     }
 
     page.HTTPStatus = lastStatusCode
     page.Status = "error"
+    if lastStatusCode == 0 {
+        page.Error = "max retries exceeded"
+    } else {
+        page.Error = http.StatusText(lastStatusCode)
+    }
     return page, internalLinks
 }
 
