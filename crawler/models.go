@@ -5,15 +5,6 @@ import (
     "time"
 )
 
-var retryableStatusCodes = map[int]bool{
-    408: true,
-    429: true,
-    500: true,
-    502: true,
-    503: true,
-    504: true,
-}
-
 type Options struct {
     URL         string
     Depth       int
@@ -42,8 +33,8 @@ type Page struct {
     Status       string       `json:"status"`
     Error        string       `json:"error,omitempty"`
     SEO          SEO          `json:"seo"`
-    BrokenLinks  []BrokenLink `json:"broken_links"`
-    Assets       []Asset      `json:"assets"`
+    BrokenLinks  []BrokenLink `json:"broken_links,omitempty"`
+    Assets       []Asset      `json:"assets,omitempty"`
     DiscoveredAt time.Time    `json:"discovered_at"`
 }
 

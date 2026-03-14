@@ -1118,8 +1118,8 @@ func TestAnalyze_JSONIndent(t *testing.T) {
     }
 
     var report1, report2 Report
-    json.Unmarshal(result1, &report1)
-    json.Unmarshal(result2, &report2)
+    _ = json.Unmarshal(result1, &report1)
+    _ = json.Unmarshal(result2, &report2)
 
     if report1.RootURL != report2.RootURL {
         t.Error("RootURL should be the same")

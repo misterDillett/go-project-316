@@ -7,9 +7,9 @@ import (
     "io"
     "net/http"
     "net/url"
+    "sort"
     "strings"
     "time"
-    "sort"
 )
 
 type RateLimiter struct {
@@ -225,7 +225,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
 
         body, err := io.ReadAll(resp.Body)
         lastStatusCode = resp.StatusCode
-        resp.Body.Close()
+        _ = resp.Body.Close()
 
         if err != nil {
             page.HTTPStatus = resp.StatusCode
@@ -238,6 +238,12 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             page.HTTPStatus = resp.StatusCode
             page.Status = "ok"
             page.Error = ""
+
+            if !isHTMLContent(resp.Header.Get("Content-Type")) && !strings.Contains(pageURL, "feed.xml") {
+                page.BrokenLinks = nil
+                page.Assets = nil
+                return page, internalLinks
+            }
 
             page.BrokenLinks = []BrokenLink{}
             page.Assets = []Asset{}
@@ -267,7 +273,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                             } else {
                                 brokenLink.StatusCode = statusCode
                                 if statusCode == 404 {
-                                    brokenLink.Error = "Not Found"
+                                    brokenLink.Error = "not found"
                                 }
                             }
                             page.BrokenLinks = append(page.BrokenLinks, brokenLink)
@@ -321,7 +327,6 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
     } else {
         page.Error = http.StatusText(lastStatusCode)
     }
-
     return page, internalLinks
 }
 
@@ -371,18 +376,18 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
         if resp.StatusCode >= 400 {
             asset.SizeBytes = 0
             if resp.StatusCode == 404 {
-                asset.Error = "Not Found"
+                asset.Error = "not found"
             } else {
                 asset.Error = http.StatusText(resp.StatusCode)
             }
-            resp.Body.Close()
+            _ = resp.Body.Close()
             assetCache[assetURL] = asset
             return asset
         }
 
         if resp.ContentLength > 0 {
             asset.SizeBytes = resp.ContentLength
-            resp.Body.Close()
+            _ = resp.Body.Close()
 
             if resp.StatusCode >= 200 && resp.StatusCode < 300 {
                 asset.Error = ""
@@ -390,7 +395,7 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
                 return asset
             }
         } else {
-            resp.Body.Close()
+            _ = resp.Body.Close()
         }
 
         if limiter != nil {
@@ -419,17 +424,17 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
         if getResp.StatusCode >= 400 {
             asset.SizeBytes = 0
             if getResp.StatusCode == 404 {
-                asset.Error = "Not Found"
+                asset.Error = "not found"
             } else {
                 asset.Error = http.StatusText(getResp.StatusCode)
             }
-            getResp.Body.Close()
+            _ = getResp.Body.Close()
             assetCache[assetURL] = asset
             return asset
         }
 
-        asset.SizeBytes, _ = io.Copy(io.Discard, getResp.Body)
-        getResp.Body.Close()
+        _, _ = io.Copy(io.Discard, getResp.Body)
+        _ = getResp.Body.Close()
 
         if getResp.StatusCode >= 200 && getResp.StatusCode < 300 {
             asset.Error = ""
@@ -486,11 +491,11 @@ func checkLink(ctx context.Context, opts Options, limiter *RateLimiter, linkURL 
         }
 
         if resp.StatusCode == 405 {
-            resp.Body.Close()
+            _ = resp.Body.Close()
             return checkLinkWithGET(ctx, opts, limiter, linkURL)
         }
 
-        resp.Body.Close()
+        _ = resp.Body.Close()
 
         if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
             return resp.StatusCode, nil
@@ -530,12 +535,12 @@ func checkLinkWithGET(ctx context.Context, opts Options, limiter *RateLimiter, l
             continue
         }
 
-        _, err = io.CopyN(io.Discard, resp.Body, 1024)
-        resp.Body.Close()
+        _, _ = io.CopyN(io.Discard, resp.Body, 1024)
+        _ = resp.Body.Close()
 
         if resp.StatusCode < 500 && resp.StatusCode != 408 && resp.StatusCode != 429 {
             if resp.StatusCode == 404 {
-                return resp.StatusCode, fmt.Errorf("Not Found")
+                return resp.StatusCode, fmt.Errorf("not found")
             }
             return resp.StatusCode, nil
         }
