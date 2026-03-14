@@ -9,6 +9,7 @@ import (
     "net/url"
     "strings"
     "time"
+    "sort"
 )
 
 type RateLimiter struct {
@@ -133,6 +134,10 @@ func Analyze(ctx context.Context, opts Options) ([]byte, error) {
         }
     }
 
+    sort.Slice(allPages, func(i, j int) bool {
+        return allPages[i].URL < allPages[j].URL
+    })
+
     report.Pages = allPages
 
     var jsonData []byte
@@ -178,6 +183,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             if !limiter.Wait(ctx) {
                 page.HTTPStatus = 0
                 page.Status = "error"
+                page.Error = err.Error()
                 return page, internalLinks
             }
         }
