@@ -18,6 +18,11 @@ type SEOTags struct {
     H1          string
 }
 
+type AssetInfo struct {
+    URL  string
+    Type string
+}
+
 func ParseLinks(baseURL string, htmlContent []byte) ([]Link, error) {
     doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(htmlContent)))
     if err != nil {
@@ -33,12 +38,12 @@ func ParseLinks(baseURL string, htmlContent []byte) ([]Link, error) {
             return
         }
 
-        absoluteURL, err := resolveURL(baseURL, href)
-        if err != nil {
+        absoluteURL := resolveRelativeURL(baseURL, href)
+        if absoluteURL == "" {
             return
         }
 
-        if !isSupportedScheme(absoluteURL) {
+        if !isSchemeSupported(absoluteURL) {
             return
         }
 
@@ -49,6 +54,69 @@ func ParseLinks(baseURL string, htmlContent []byte) ([]Link, error) {
     })
 
     return links, nil
+}
+
+func ParseAssets(baseURL string, htmlContent []byte) []AssetInfo {
+    doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(htmlContent)))
+    if err != nil {
+        return nil
+    }
+
+    var assets []AssetInfo
+    seen := make(map[string]bool)
+
+    doc.Find("img[src]").Each(func(i int, s *goquery.Selection) {
+        src, exists := s.Attr("src")
+        if !exists || src == "" {
+            return
+        }
+
+        absoluteURL := resolveRelativeURL(baseURL, src)
+        if absoluteURL == "" || !isSchemeSupported(absoluteURL) {
+            return
+        }
+
+        if !seen[absoluteURL] {
+            seen[absoluteURL] = true
+            assets = append(assets, AssetInfo{URL: absoluteURL, Type: "image"})
+        }
+    })
+
+    doc.Find("script[src]").Each(func(i int, s *goquery.Selection) {
+        src, exists := s.Attr("src")
+        if !exists || src == "" {
+            return
+        }
+
+        absoluteURL := resolveRelativeURL(baseURL, src)
+        if absoluteURL == "" || !isSchemeSupported(absoluteURL) {
+            return
+        }
+
+        if !seen[absoluteURL] {
+            seen[absoluteURL] = true
+            assets = append(assets, AssetInfo{URL: absoluteURL, Type: "script"})
+        }
+    })
+
+    doc.Find("link[rel='stylesheet'][href]").Each(func(i int, s *goquery.Selection) {
+        href, exists := s.Attr("href")
+        if !exists || href == "" {
+            return
+        }
+
+        absoluteURL := resolveRelativeURL(baseURL, href)
+        if absoluteURL == "" || !isSchemeSupported(absoluteURL) {
+            return
+        }
+
+        if !seen[absoluteURL] {
+            seen[absoluteURL] = true
+            assets = append(assets, AssetInfo{URL: absoluteURL, Type: "style"})
+        }
+    })
+
+    return assets
 }
 
 func ParseSEOTags(htmlContent []byte) SEOTags {
@@ -89,22 +157,21 @@ func cleanText(text string) string {
     return text
 }
 
-func resolveURL(base, ref string) (string, error) {
+func resolveRelativeURL(base, ref string) string {
     baseURL, err := url.Parse(base)
     if err != nil {
-        return "", err
+        return ref
     }
 
     refURL, err := url.Parse(ref)
     if err != nil {
-        return "", err
+        return ref
     }
 
-    absoluteURL := baseURL.ResolveReference(refURL)
-    return absoluteURL.String(), nil
+    return baseURL.ResolveReference(refURL).String()
 }
 
-func isSupportedScheme(rawURL string) bool {
+func isSchemeSupported(rawURL string) bool {
     parsed, err := url.Parse(rawURL)
     if err != nil {
         return false

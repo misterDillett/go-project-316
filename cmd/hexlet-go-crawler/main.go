@@ -39,11 +39,6 @@ func main() {
                 Value: 15 * time.Second,
                 Usage: "per-request timeout",
             },
-            &cli.IntFlag{
-                Name:  "rps",
-                Value: 0,
-                Usage: "limit requests per second (overrides delay)",
-            },
             &cli.StringFlag{
                 Name:  "user-agent",
                 Value: "HexletCrawler/1.0",

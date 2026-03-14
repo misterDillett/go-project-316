@@ -150,7 +150,7 @@ func TestParseSEOTags_MultipleH1(t *testing.T) {
     }
 }
 
-func TestResolveURL(t *testing.T) {
+func TestResolveRelativeURL(t *testing.T) {
     tests := []struct {
         base     string
         ref      string
@@ -163,13 +163,9 @@ func TestResolveURL(t *testing.T) {
     }
 
     for _, test := range tests {
-        result, err := resolveURL(test.base, test.ref)
-        if err != nil {
-            t.Errorf("Unexpected error for %s + %s: %v", test.base, test.ref, err)
-            continue
-        }
+        result := resolveRelativeURL(test.base, test.ref)
         if result != test.expected {
-            t.Errorf("resolveURL(%s, %s) = %s; expected %s",
+            t.Errorf("resolveRelativeURL(%s, %s) = %s; expected %s",
                 test.base, test.ref, result, test.expected)
         }
     }
