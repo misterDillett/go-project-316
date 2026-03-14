@@ -161,8 +161,8 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         Depth:        depth,
         DiscoveredAt: time.Now().UTC(),
         SEO:          SEO{},
-        BrokenLinks:  nil,
-        Assets:       nil,
+        BrokenLinks:  []BrokenLink{},
+        Assets:       []Asset{},
     }
 
     var internalLinks []string
@@ -242,9 +242,6 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                         statusCode, err := checkLink(ctx, opts, limiter, absURL)
 
                         if err != nil || statusCode >= 400 {
-                            if page.BrokenLinks == nil {
-                                page.BrokenLinks = []BrokenLink{}
-                            }
                             brokenLink := BrokenLink{
                                 URL: absURL,
                             }
@@ -285,9 +282,6 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                     if !seen[asset.URL] {
                         seen[asset.URL] = true
                         assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
-                        if page.Assets == nil {
-                            page.Assets = []Asset{}
-                        }
                         page.Assets = append(page.Assets, assetInfo)
                     }
                 }
