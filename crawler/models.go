@@ -40,10 +40,9 @@ type Page struct {
     Depth        int          `json:"depth"`
     HTTPStatus   int          `json:"http_status"`
     Status       string       `json:"status"`
-    Error        string       `json:"error"`
     SEO          SEO          `json:"seo"`
-    BrokenLinks  []BrokenLink `json:"broken_links"`
-    Assets       []Asset      `json:"assets"`
+    BrokenLinks  []BrokenLink `json:"broken_links,omitempty"`
+    Assets       []Asset      `json:"assets,omitempty"`
     DiscoveredAt time.Time    `json:"discovered_at"`
 }
 
@@ -53,7 +52,6 @@ type SEO struct {
     HasDescription bool   `json:"has_description"`
     Description    string `json:"description"`
     HasH1          bool   `json:"has_h1"`
-    H1             string `json:"h1"`
 }
 
 type BrokenLink struct {

@@ -9,7 +9,6 @@ import (
     "net/url"
     "strings"
     "time"
-    "sync"
 )
 
 type RateLimiter struct {
@@ -19,7 +18,6 @@ type RateLimiter struct {
 
 var (
     assetCache = make(map[string]Asset)
-    assetMu    sync.Mutex
 )
 
 func NewRateLimiter(rps int, delay time.Duration) *RateLimiter {
@@ -61,6 +59,15 @@ func (r *RateLimiter) Stop() {
     }
 }
 
+func normalizeURL(rawURL string) string {
+    parsed, err := url.Parse(rawURL)
+    if err != nil {
+        return rawURL
+    }
+    parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+    return parsed.String()
+}
+
 func Analyze(ctx context.Context, opts Options) ([]byte, error) {
     if opts.URL == "" {
         return nil, fmt.Errorf("URL is required")
@@ -87,7 +94,9 @@ func Analyze(ctx context.Context, opts Options) ([]byte, error) {
         url   string
         depth int
     }
-    queue := []queueItem{{url: opts.URL, depth: 0}}
+
+    startURL := normalizeURL(opts.URL)
+    queue := []queueItem{{url: startURL, depth: 0}}
 
     for i := 0; i < len(queue); i++ {
         select {
@@ -98,21 +107,23 @@ func Analyze(ctx context.Context, opts Options) ([]byte, error) {
         }
 
         item := queue[i]
+        normalizedItemURL := normalizeURL(item.url)
 
         if item.depth > opts.Depth {
             continue
         }
 
-        if visited[item.url] {
+        if visited[normalizedItemURL] {
             continue
         }
-        visited[item.url] = true
+        visited[normalizedItemURL] = true
 
         page, internalLinks := fetchPageWithInternal(ctx, opts, limiter, item.url, item.depth)
         allPages = append(allPages, page)
 
         for _, link := range internalLinks {
-            if !visited[link] {
+            normalizedLink := normalizeURL(link)
+            if !visited[normalizedLink] {
                 queue = append(queue, queueItem{url: link, depth: item.depth + 1})
             }
         }
@@ -145,12 +156,11 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         Depth:        depth,
         DiscoveredAt: time.Now().UTC(),
         SEO:          SEO{},
-        BrokenLinks:  []BrokenLink{},
-        Assets:       []Asset{},
+        BrokenLinks:  nil,
+        Assets:       nil,
     }
 
     var internalLinks []string
-    var lastErr error
     var lastStatusCode int
 
     for attempt := 0; attempt <= opts.Retries; attempt++ {
@@ -160,7 +170,6 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             case <-ctx.Done():
                 page.HTTPStatus = 0
                 page.Status = "error"
-                page.Error = ctx.Err().Error()
                 return page, internalLinks
             }
         }
@@ -169,14 +178,12 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
             if !limiter.Wait(ctx) {
                 page.HTTPStatus = 0
                 page.Status = "error"
-                page.Error = "cancelled by rate limiter"
                 return page, internalLinks
             }
         }
 
         req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
         if err != nil {
-            lastErr = err
             continue
         }
 
@@ -186,7 +193,6 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
 
         resp, err := opts.HTTPClient.Do(req)
         if err != nil {
-            lastErr = err
             continue
         }
 
@@ -195,14 +201,12 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         resp.Body.Close()
 
         if err != nil {
-            lastErr = err
             continue
         }
 
         if resp.StatusCode >= 200 && resp.StatusCode < 300 {
             page.HTTPStatus = resp.StatusCode
             page.Status = "ok"
-            page.Error = ""
 
             if isHTMLContent(resp.Header.Get("Content-Type")) {
                 seoTags := ParseSEOTags(body)
@@ -212,11 +216,11 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                     HasDescription: seoTags.Description != "",
                     Description:    seoTags.Description,
                     HasH1:          seoTags.H1 != "",
-                    H1:             seoTags.H1,
                 }
 
                 links, err := ParseLinks(pageURL, body)
                 if err == nil {
+                    var broken []BrokenLink
                     for _, link := range links {
                         absURL := resolveURL(pageURL, link.URL)
                         statusCode, err := checkLink(ctx, opts, limiter, absURL)
@@ -233,30 +237,38 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                                     brokenLink.Error = "Not Found"
                                 }
                             }
-                            page.BrokenLinks = append(page.BrokenLinks, brokenLink)
+                            broken = append(broken, brokenLink)
                         }
 
-                        if err == nil && statusCode >= 200 && statusCode < 300 &&
-                           isSameDomain(absURL, opts.URL) && depth < opts.Depth {
+                        if isSameDomain(absURL, opts.URL) && depth < opts.Depth {
                             if !strings.Contains(absURL, ".jpg") &&
                                !strings.Contains(absURL, ".png") &&
                                !strings.Contains(absURL, ".css") &&
                                !strings.Contains(absURL, ".js") &&
-                               !strings.Contains(absURL, ".svg") {
+                               !strings.Contains(absURL, ".svg") &&
+                               !strings.Contains(absURL, ".xml") &&
+                               !strings.Contains(absURL, ".webp") {
                                 internalLinks = append(internalLinks, absURL)
                             }
                         }
                     }
+                    if len(broken) > 0 {
+                        page.BrokenLinks = broken
+                    }
                 }
 
                 assets := ParseAssets(pageURL, body)
-                seen := make(map[string]bool)
-                for _, asset := range assets {
-                    if !seen[asset.URL] {
-                        seen[asset.URL] = true
-                        assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
-                        page.Assets = append(page.Assets, assetInfo)
+                if len(assets) > 0 {
+                    var assetList []Asset
+                    seen := make(map[string]bool)
+                    for _, asset := range assets {
+                        if !seen[asset.URL] {
+                            seen[asset.URL] = true
+                            assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
+                            assetList = append(assetList, assetInfo)
+                        }
                     }
+                    page.Assets = assetList
                 }
             }
             return page, internalLinks
@@ -265,30 +277,19 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         if !isRetryableStatusCode(resp.StatusCode) {
             page.HTTPStatus = resp.StatusCode
             page.Status = "error"
-            page.Error = http.StatusText(resp.StatusCode)
             return page, internalLinks
         }
-
-        lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
     }
 
     page.HTTPStatus = lastStatusCode
     page.Status = "error"
-    if lastErr != nil {
-        page.Error = lastErr.Error()
-    } else {
-        page.Error = "max retries exceeded"
-    }
     return page, internalLinks
 }
 
 func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetURL, assetType string) Asset {
-    assetMu.Lock()
     if cached, exists := assetCache[assetURL]; exists {
-        assetMu.Unlock()
         return cached
     }
-    assetMu.Unlock()
 
     asset := Asset{
         URL:  assetURL,
@@ -336,11 +337,7 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
                 asset.Error = http.StatusText(resp.StatusCode)
             }
             resp.Body.Close()
-
-            // Сохраняем в кэш
-            assetMu.Lock()
             assetCache[assetURL] = asset
-            assetMu.Unlock()
             return asset
         }
 
@@ -350,10 +347,7 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
 
             if resp.StatusCode >= 200 && resp.StatusCode < 300 {
                 asset.Error = ""
-
-                assetMu.Lock()
                 assetCache[assetURL] = asset
-                assetMu.Unlock()
                 return asset
             }
         } else {
@@ -391,10 +385,7 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
                 asset.Error = http.StatusText(getResp.StatusCode)
             }
             getResp.Body.Close()
-
-            assetMu.Lock()
             assetCache[assetURL] = asset
-            assetMu.Unlock()
             return asset
         }
 
@@ -403,10 +394,7 @@ func fetchAsset(ctx context.Context, opts Options, limiter *RateLimiter, assetUR
 
         if getResp.StatusCode >= 200 && getResp.StatusCode < 300 {
             asset.Error = ""
-
-            assetMu.Lock()
             assetCache[assetURL] = asset
-            assetMu.Unlock()
             return asset
         }
     }

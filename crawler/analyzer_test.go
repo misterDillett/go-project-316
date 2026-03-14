@@ -20,6 +20,15 @@ type MockHTTPClient struct {
     hook      func(*http.Request)
 }
 
+func normalizeURLForTest(rawURL string) string {
+    parsed, err := url.Parse(rawURL)
+    if err != nil {
+        return rawURL
+    }
+    parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+    return parsed.String()
+}
+
 func NewMockHTTPClient() *MockHTTPClient {
     return &MockHTTPClient{
         Responses: make(map[string]*http.Response),
