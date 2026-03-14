@@ -33,8 +33,8 @@ type Page struct {
     Status       string       `json:"status"`
     Error        string       `json:"error,omitempty"`
     SEO          SEO          `json:"seo"`
-    BrokenLinks  []BrokenLink `json:"broken_links,omitempty"`
-    Assets       []Asset      `json:"assets,omitempty"`
+    BrokenLinks  []BrokenLink `json:"broken_links"`
+    Assets       []Asset      `json:"assets"`
     DiscoveredAt time.Time    `json:"discovered_at"`
 }
 
