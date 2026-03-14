@@ -161,8 +161,8 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         Depth:        depth,
         DiscoveredAt: time.Now().UTC(),
         SEO:          SEO{},
-        BrokenLinks:  []BrokenLink{},
-        Assets:       []Asset{},
+        BrokenLinks:  nil,
+        Assets:       nil,
     }
 
     var internalLinks []string
@@ -237,12 +237,14 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
 
                 links, err := ParseLinks(pageURL, body)
                 if err == nil {
-                    var broken []BrokenLink
                     for _, link := range links {
                         absURL := resolveURL(pageURL, link.URL)
                         statusCode, err := checkLink(ctx, opts, limiter, absURL)
 
                         if err != nil || statusCode >= 400 {
+                            if page.BrokenLinks == nil {
+                                page.BrokenLinks = []BrokenLink{}
+                            }
                             brokenLink := BrokenLink{
                                 URL: absURL,
                             }
@@ -254,7 +256,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                                     brokenLink.Error = "Not Found"
                                 }
                             }
-                            broken = append(broken, brokenLink)
+                            page.BrokenLinks = append(page.BrokenLinks, brokenLink)
                         }
 
                         if isSameDomain(absURL, opts.URL) && depth < opts.Depth {
@@ -263,13 +265,18 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                                !strings.Contains(absURL, ".css") &&
                                !strings.Contains(absURL, ".js") &&
                                !strings.Contains(absURL, ".svg") &&
-                               !strings.Contains(absURL, ".xml") &&
                                !strings.Contains(absURL, ".webp") {
-                                internalLinks = append(internalLinks, absURL)
+
+                                if strings.Contains(absURL, ".xml") {
+                                    if strings.Contains(absURL, "feed.xml") || strings.Contains(absURL, "sitemap.xml") {
+                                        internalLinks = append(internalLinks, absURL)
+                                    }
+                                } else {
+                                    internalLinks = append(internalLinks, absURL)
+                                }
                             }
                         }
                     }
-                    page.BrokenLinks = append(page.BrokenLinks, broken...)
                 }
 
                 assets := ParseAssets(pageURL, body)
@@ -278,6 +285,9 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                     if !seen[asset.URL] {
                         seen[asset.URL] = true
                         assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
+                        if page.Assets == nil {
+                            page.Assets = []Asset{}
+                        }
                         page.Assets = append(page.Assets, assetInfo)
                     }
                 }
