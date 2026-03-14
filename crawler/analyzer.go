@@ -156,8 +156,8 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
         Depth:        depth,
         DiscoveredAt: time.Now().UTC(),
         SEO:          SEO{},
-        BrokenLinks:  nil,
-        Assets:       nil,
+        BrokenLinks:  []BrokenLink{},
+        Assets:       []Asset{},
     }
 
     var internalLinks []string
@@ -252,23 +252,17 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *RateLimit
                             }
                         }
                     }
-                    if len(broken) > 0 {
-                        page.BrokenLinks = broken
-                    }
+                    page.BrokenLinks = append(page.BrokenLinks, broken...)
                 }
 
                 assets := ParseAssets(pageURL, body)
-                if len(assets) > 0 {
-                    var assetList []Asset
-                    seen := make(map[string]bool)
-                    for _, asset := range assets {
-                        if !seen[asset.URL] {
-                            seen[asset.URL] = true
-                            assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
-                            assetList = append(assetList, assetInfo)
-                        }
+                seen := make(map[string]bool)
+                for _, asset := range assets {
+                    if !seen[asset.URL] {
+                        seen[asset.URL] = true
+                        assetInfo := fetchAsset(ctx, opts, limiter, asset.URL, asset.Type)
+                        page.Assets = append(page.Assets, assetInfo)
                     }
-                    page.Assets = assetList
                 }
             }
             return page, internalLinks
