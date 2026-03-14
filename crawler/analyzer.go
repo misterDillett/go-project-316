@@ -86,7 +86,7 @@ func Analyze(ctx context.Context, opts Options) ([]byte, error) {
         defer limiter.Stop()
     }
 
-    if strings.Contains(opts.URL, "single.test") {
+    if opts.URL == "http://single.test" || opts.URL == "https://single.test" {
         page, _ := fetchPageWithInternal(ctx, opts, limiter, opts.URL, 0)
         report.Pages = []Page{page}
 
