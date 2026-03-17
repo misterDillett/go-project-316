@@ -4,6 +4,7 @@ import (
     "context"
     "encoding/json"
     "fmt"
+    "io"
     "net/http"
     "net/url"
     "sort"
@@ -139,6 +140,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *ratelimit
     }
 
     var internalLinks []string
+    cache := assetcache.New()
 
     if err != nil {
         page.Status = "error"
@@ -190,6 +192,17 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *ratelimit
                     }
                 }
             }
+
+            assets := parser.ParseAssets(pageURL, body)
+            for _, asset := range assets {
+                if cached, exists := cache.Get(asset.URL); exists {
+                    page.Assets = append(page.Assets, fromCacheAsset(cached))
+                    continue
+                }
+
+                assetInfo := fetchAsset(ctx, f, cache, asset.URL, asset.Type)
+                page.Assets = append(page.Assets, assetInfo)
+            }
         }
     } else {
         page.Status = "error"
@@ -199,6 +212,54 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *ratelimit
     }
 
     return page, internalLinks
+}
+
+func fetchAsset(ctx context.Context, f *fetcher.Fetcher, cache *assetcache.Cache, assetURL, assetType string) Asset {
+    req, err := http.NewRequestWithContext(ctx, "HEAD", assetURL, nil)
+    if err == nil {
+        if f != nil && f.UserAgent != "" {
+            req.Header.Set("User-Agent", f.UserAgent)
+        }
+        resp, err := http.DefaultClient.Do(req)
+        if err == nil {
+            defer resp.Body.Close()
+            if resp.ContentLength > 0 {
+                asset := Asset{
+                    URL:        assetURL,
+                    Type:       assetType,
+                    StatusCode: resp.StatusCode,
+                    SizeBytes:  resp.ContentLength,
+                }
+                cache.Set(assetURL, toCacheAsset(asset))
+                return asset
+            }
+        }
+    }
+
+    getReq, err := http.NewRequestWithContext(ctx, "GET", assetURL, nil)
+    if err != nil {
+        return Asset{URL: assetURL, Type: assetType, Error: err.Error()}
+    }
+
+    if f != nil && f.UserAgent != "" {
+        getReq.Header.Set("User-Agent", f.UserAgent)
+    }
+
+    resp, err := http.DefaultClient.Do(getReq)
+    if err != nil {
+        return Asset{URL: assetURL, Type: assetType, Error: err.Error()}
+    }
+    defer resp.Body.Close()
+
+    size, _ := io.Copy(io.Discard, resp.Body)
+    asset := Asset{
+        URL:        assetURL,
+        Type:       assetType,
+        StatusCode: resp.StatusCode,
+        SizeBytes:  size,
+    }
+    cache.Set(assetURL, toCacheAsset(asset))
+    return asset
 }
 
 func normalizeURL(rawURL string) string {
@@ -242,4 +303,24 @@ func isHTMLContentType(contentType string) bool {
     return contentType == "" ||
         contentType == "text/html" ||
         strings.Contains(contentType, "text/html")
+}
+
+func fromCacheAsset(ca assetcache.Asset) Asset {
+    return Asset{
+        URL:        ca.URL,
+        Type:       ca.Type,
+        StatusCode: ca.StatusCode,
+        SizeBytes:  ca.SizeBytes,
+        Error:      ca.Error,
+    }
+}
+
+func toCacheAsset(a Asset) assetcache.Asset {
+    return assetcache.Asset{
+        URL:        a.URL,
+        Type:       a.Type,
+        StatusCode: a.StatusCode,
+        SizeBytes:  a.SizeBytes,
+        Error:      a.Error,
+    }
 }
