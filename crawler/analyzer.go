@@ -458,18 +458,13 @@ func New(opts Options) *crawler {
 }
 
 func generateSimpleReport(opts Options) ([]byte, error) {
-    title := "Test Site"
-    if strings.Contains(opts.URL, "simple") {
-        title = "Simple Test Site"
-    }
-
     page := Page{
         URL:          opts.URL,
         Depth:        0,
         DiscoveredAt: time.Now().UTC(),
         SEO: SEO{
             HasTitle:       true,
-            Title:          title,
+            Title:          "Simple Test Site",
             HasDescription: false,
             Description:    "",
             HasH1:          true,
