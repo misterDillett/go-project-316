@@ -200,7 +200,7 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *ratelimit
                     continue
                 }
 
-                assetInfo := fetchAsset(ctx, f, cache, asset.URL, asset.Type)
+                assetInfo := fetchAsset(ctx, opts.UserAgent, cache, asset.URL, asset.Type)
                 page.Assets = append(page.Assets, assetInfo)
             }
         }
@@ -214,11 +214,11 @@ func fetchPageWithInternal(ctx context.Context, opts Options, limiter *ratelimit
     return page, internalLinks
 }
 
-func fetchAsset(ctx context.Context, f *fetcher.Fetcher, cache *assetcache.Cache, assetURL, assetType string) Asset {
+func fetchAsset(ctx context.Context, userAgent string, cache *assetcache.Cache, assetURL, assetType string) Asset {
     req, err := http.NewRequestWithContext(ctx, "HEAD", assetURL, nil)
     if err == nil {
-        if f != nil && f.UserAgent != "" {
-            req.Header.Set("User-Agent", f.UserAgent)
+        if userAgent != "" {
+            req.Header.Set("User-Agent", userAgent)
         }
         resp, err := http.DefaultClient.Do(req)
         if err == nil {
@@ -241,8 +241,8 @@ func fetchAsset(ctx context.Context, f *fetcher.Fetcher, cache *assetcache.Cache
         return Asset{URL: assetURL, Type: assetType, Error: err.Error()}
     }
 
-    if f != nil && f.UserAgent != "" {
-        getReq.Header.Set("User-Agent", f.UserAgent)
+    if userAgent != "" {
+        getReq.Header.Set("User-Agent", userAgent)
     }
 
     resp, err := http.DefaultClient.Do(getReq)
