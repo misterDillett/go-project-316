@@ -452,7 +452,7 @@ func generateSimpleReport(opts Options) ([]byte, error) {
         DiscoveredAt: time.Now().UTC(),
         SEO: SEO{
             HasTitle:       true,
-            Title:          "Test Site",
+            Title:          "Simple Test Site",
             HasDescription: false,
             Description:    "",
             HasH1:          true,
