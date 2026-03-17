@@ -222,7 +222,7 @@ func fetchAsset(ctx context.Context, userAgent string, cache *assetcache.Cache, 
         }
         resp, err := http.DefaultClient.Do(req)
         if err == nil {
-            defer resp.Body.Close()
+            defer func() { _ = resp.Body.Close() }()
             if resp.ContentLength > 0 {
                 asset := Asset{
                     URL:        assetURL,

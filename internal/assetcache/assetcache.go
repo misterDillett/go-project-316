@@ -94,7 +94,7 @@ func fetchAssetHead(ctx context.Context, f *fetcher.Fetcher, assetURL string) (i
     if err != nil {
         return 0, 0, err
     }
-    defer resp.Body.Close()
+    defer func() { _ = resp.Body.Close() }()
 
     if resp.StatusCode >= 400 {
         return resp.StatusCode, 0, fmt.Errorf("http %d", resp.StatusCode)
@@ -114,7 +114,7 @@ func fetchAssetGet(ctx context.Context, f *fetcher.Fetcher, assetURL string) (in
     if err != nil {
         return 0, 0, err
     }
-    defer resp.Body.Close()
+    defer func() { _ = resp.Body.Close() }()
 
     if resp.StatusCode >= 400 {
         return resp.StatusCode, 0, fmt.Errorf("http %d", resp.StatusCode)

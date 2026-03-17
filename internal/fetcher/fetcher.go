@@ -59,10 +59,6 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (int, []byte, error) {
             req.Header.Set("User-Agent", f.userAgent)
         }
 
-        if strings.Contains(url, "example.com") {
-
-        }
-
         resp, err := f.client.Do(req)
         if err != nil {
             if attempt == f.retries {
