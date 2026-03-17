@@ -16,6 +16,27 @@ import (
     "code/internal/ratelimiter"
 )
 
+type Crawler struct {
+    fetcher *fetcher.Fetcher
+    limiter *ratelimiter.RateLimiter
+    cache   *assetcache.Cache
+    opts    Options
+}
+
+func New(opts Options) *Crawler {
+    limiter := ratelimiter.New(0, opts.Delay)
+    return &Crawler{
+        fetcher: fetcher.New(opts.HTTPClient, opts.Retries, limiter, opts.UserAgent),
+        limiter: limiter,
+        cache:   assetcache.New(),
+        opts:    opts,
+    }
+}
+
+func (c *Crawler) Analyze(ctx context.Context) ([]byte, error) {
+    return Analyze(ctx, c.opts)
+}
+
 func Analyze(ctx context.Context, opts Options) ([]byte, error) {
     if opts.URL == "" {
         return nil, fmt.Errorf("URL is required")
@@ -221,17 +242,4 @@ func isHTMLContentType(contentType string) bool {
     return contentType == "" ||
         contentType == "text/html" ||
         strings.Contains(contentType, "text/html")
-}
-
-func New(opts Options) *crawler {
-    return &crawler{
-        fetcher: fetcher.New(opts.HTTPClient, opts.Retries, nil, opts.UserAgent),
-        limiter: ratelimiter.New(0, opts.Delay),
-        cache:   assetcache.New(),
-        opts:    opts,
-    }
-}
-
-func (c *crawler) Analyze(ctx context.Context) ([]byte, error) {
-    return Analyze(ctx, c.opts)
 }
