@@ -5,7 +5,6 @@ import (
     "fmt"
     "io"
     "net/http"
-    "strings"
     "time"
 
     "code/internal/ratelimiter"
