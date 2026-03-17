@@ -50,8 +50,30 @@ func Analyze(ctx context.Context, opts Options) ([]byte, error) {
         return generateSimpleReport(opts)
     }
 
+    ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+    defer cancel()
+
     c := newCrawler(opts)
-    return c.crawl(ctx)
+
+    resultCh := make(chan struct {
+        data []byte
+        err  error
+    }, 1)
+
+    go func() {
+        data, err := c.crawl(ctx)
+        resultCh <- struct {
+            data []byte
+            err  error
+        }{data, err}
+    }()
+
+    select {
+    case <-ctx.Done():
+        return generateSimpleReport(opts)
+    case res := <-resultCh:
+        return res.data, res.err
+    }
 }
 
 func (c *crawler) crawl(ctx context.Context) ([]byte, error) {
