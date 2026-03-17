@@ -63,61 +63,81 @@ func (o *Orchestrator) Analyze(ctx context.Context) ([]byte, error) {
         Pages:       []Page{},
     }
 
-    if o.depth == 1 && strings.Contains(o.rootURL, "single.test") {
-        page, _ := o.fetchPage(ctx, o.rootURL, 0)
-        report.Pages = []Page{page}
-        return o.marshalJSON(report)
-    }
-
     o.cache.Clear()
 
-    visited := make(map[string]bool)
-    var allPages []Page
+    tasks := make(chan queueItem, 100)
+    results := make(chan resultItem, 100)
 
-    type queueItem struct {
-        url   string
-        depth int
+    var wg sync.WaitGroup
+    var pagesMu sync.Mutex
+    var visitedMu sync.Mutex
+    visited := make(map[string]bool)
+    allPages := make(map[string]Page)
+
+    for i := 0; i < o.concurrency; i++ {
+        wg.Add(1)
+        go o.worker(ctx, tasks, results, &wg)
     }
+
+    go func() {
+        for res := range results {
+            pagesMu.Lock()
+            if _, exists := allPages[res.page.URL]; !exists {
+                allPages[res.page.URL] = res.page
+
+                for _, link := range res.links {
+                    visitedMu.Lock()
+                    if !visited[link] {
+                        visited[link] = true
+                        visitedMu.Unlock()
+
+                        select {
+                        case tasks <- queueItem{url: link, depth: res.page.Depth + 1}:
+                        case <-ctx.Done():
+                            pagesMu.Unlock()
+                            return
+                        }
+                    } else {
+                        visitedMu.Unlock()
+                    }
+                }
+            }
+            pagesMu.Unlock()
+        }
+    }()
 
     startURL := normalizeURL(o.rootURL)
-    queue := []queueItem{{url: startURL, depth: 0}}
+    visited[startURL] = true
+    tasks <- queueItem{url: startURL, depth: 0}
 
-    for i := 0; i < len(queue); i++ {
-        select {
-        case <-ctx.Done():
-            report.Pages = allPages
-            return o.marshalJSON(report)
-        default:
-        }
+    go func() {
+        wg.Wait()
+        close(tasks)
+    }()
 
-        item := queue[i]
-        normalizedItemURL := normalizeURL(item.url)
+    done := make(chan struct{})
+    go func() {
+        wg.Wait()
+        close(done)
+    }()
 
-        if item.depth > o.depth {
-            continue
-        }
-
-        if visited[normalizedItemURL] {
-            continue
-        }
-        visited[normalizedItemURL] = true
-
-        page, internalLinks := o.fetchPageWithLinks(ctx, item.url, item.depth)
-        allPages = append(allPages, page)
-
-        for _, link := range internalLinks {
-            normalizedLink := normalizeURL(link)
-            if !visited[normalizedLink] {
-                queue = append(queue, queueItem{url: link, depth: item.depth + 1})
-            }
-        }
+    select {
+    case <-ctx.Done():
+    case <-done:
     }
 
-    sort.Slice(allPages, func(i, j int) bool {
-        return allPages[i].URL < allPages[j].URL
+    close(results)
+
+    pagesMu.Lock()
+    for _, page := range allPages {
+        report.Pages = append(report.Pages, page)
+    }
+    pagesMu.Unlock()
+
+    sort.Slice(report.Pages, func(i, j int) bool {
+        return report.Pages[i].URL < report.Pages[j].URL
     })
 
-    report.Pages = allPages
     return o.marshalJSON(report)
 }
 
@@ -164,6 +184,8 @@ func (o *Orchestrator) fetchPage(ctx context.Context, pageURL string, depth int)
     if err != nil {
         page.Status = "error"
         page.Error = err.Error()
+        page.BrokenLinks = nil
+        page.Assets = nil
         return page, err
     }
 
@@ -184,6 +206,8 @@ func (o *Orchestrator) fetchPage(ctx context.Context, pageURL string, depth int)
     } else {
         page.Status = "error"
         page.Error = http.StatusText(statusCode)
+        page.BrokenLinks = nil
+        page.Assets = nil
     }
 
     return page, nil
@@ -207,6 +231,8 @@ func (o *Orchestrator) fetchPageWithLinks(ctx context.Context, pageURL string, d
     if err != nil {
         page.Status = "error"
         page.Error = err.Error()
+        page.BrokenLinks = nil
+        page.Assets = nil
         return page, internalLinks
     }
 
@@ -266,6 +292,8 @@ func (o *Orchestrator) fetchPageWithLinks(ctx context.Context, pageURL string, d
     } else {
         page.Status = "error"
         page.Error = http.StatusText(statusCode)
+        page.BrokenLinks = nil
+        page.Assets = nil
     }
 
     return page, internalLinks
