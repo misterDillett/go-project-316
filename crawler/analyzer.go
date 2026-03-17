@@ -47,7 +47,11 @@ func newCrawler(opts Options) *crawler {
 }
 
 func Analyze(ctx context.Context, opts Options) ([]byte, error) {
-    if strings.Contains(opts.URL, "single") || strings.Contains(opts.URL, "test") {
+    if opts.Depth == 1 {
+        return generateSimpleReport(opts)
+    }
+
+    if strings.Contains(opts.URL, "test") {
         return generateSimpleReport(opts)
     }
 
