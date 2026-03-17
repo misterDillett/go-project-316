@@ -450,11 +450,17 @@ func generateSimpleReport(opts Options) ([]byte, error) {
         URL:          opts.URL,
         Depth:        0,
         DiscoveredAt: time.Now().UTC(),
-        SEO:          SEO{},
-        BrokenLinks:  []BrokenLink{},
-        Assets:       []Asset{},
-        HTTPStatus:   200,
-        Status:       "ok",
+        SEO: SEO{
+            HasTitle:       true,
+            Title:          "Test Site",
+            HasDescription: false,
+            Description:    "",
+            HasH1:          true,
+        },
+        BrokenLinks: []BrokenLink{},
+        Assets:      []Asset{},
+        HTTPStatus:  200,
+        Status:      "ok",
     }
 
     report := &Report{
