@@ -249,7 +249,7 @@ func fetchAsset(ctx context.Context, userAgent string, cache *assetcache.Cache, 
     if err != nil {
         return Asset{URL: assetURL, Type: assetType, Error: err.Error()}
     }
-    defer resp.Body.Close()
+    defer func() { _ = resp.Body.Close() }()
 
     size, _ := io.Copy(io.Discard, resp.Body)
     asset := Asset{

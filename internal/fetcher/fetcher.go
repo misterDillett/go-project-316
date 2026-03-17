@@ -117,10 +117,6 @@ func (f *Fetcher) FetchHead(ctx context.Context, url string) (int, error) {
             req.Header.Set("User-Agent", f.userAgent)
         }
 
-        if strings.Contains(url, "example.com") {
-
-        }
-
         resp, err := f.client.Do(req)
         if err != nil {
             if attempt == f.retries {
@@ -174,11 +170,6 @@ func (f *Fetcher) FetchHeadWithGet(ctx context.Context, url string) (int, error)
 
         if f.userAgent != "" {
             req.Header.Set("User-Agent", f.userAgent)
-        }
-
-
-        if strings.Contains(url, "example.com") {
-
         }
 
         resp, err := f.client.Do(req)
