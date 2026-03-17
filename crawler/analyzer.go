@@ -222,3 +222,16 @@ func isHTMLContentType(contentType string) bool {
         contentType == "text/html" ||
         strings.Contains(contentType, "text/html")
 }
+
+func New(opts Options) *crawler {
+    return &crawler{
+        fetcher: fetcher.New(opts.HTTPClient, opts.Retries, nil, opts.UserAgent),
+        limiter: ratelimiter.New(0, opts.Delay),
+        cache:   assetcache.New(),
+        opts:    opts,
+    }
+}
+
+func (c *crawler) Analyze(ctx context.Context) ([]byte, error) {
+    return Analyze(ctx, c.opts)
+}
