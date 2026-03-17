@@ -19,7 +19,7 @@ build: install-deps
 	go build -o $(BINARY_NAME) $(CMD_PATH)
 
 test: install-deps
-	go test -v -cover ./...
+	go test -v -cover -timeout 30s ./...
 
 run: install-deps
 ifndef URL

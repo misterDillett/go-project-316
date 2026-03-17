@@ -83,7 +83,8 @@ func main() {
                 HTTPClient:  httpClient,
             }
 
-            result, err := crawler.Analyze(ctx, opts)
+            orchestrator := crawler.New(opts)
+            result, err := orchestrator.Analyze(ctx)
             if err != nil {
                 return err
             }
